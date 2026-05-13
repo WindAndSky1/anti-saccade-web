@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<!--
+  反眼跳任务 · 独立测试版（无后端、无 Java）
+  ──────────────────────────────────────────
+  使用方式：
+    1. 双击本文件直接在浏览器中打开（file:// 协议），或
+    2. 把整个 static/ 目录上传到任意静态托管（Netlify / GitHub Pages 等），
+       访问 https://你的域名/standalone.html
+    3. 可附带 URL 参数覆盖默认值，例：
+       standalone.html?subjectId=S001&practiceTrials=10
+
+  与 jar 版本的差异：
+    - 配置由本文件内联硬编码（不再由 Spring Boot 注入）
+    - 实验结束后 CSV + Summary JSON 通过浏览器自动下载（不再 POST 到后端）
+    - 其余实验逻辑 100% 复用 js/、css/ 下的文件，与 jar 版本完全一致
+
+  本文件是新增文件，未修改任何现有代码。删除本文件即可回到原 jar-only 状态。
+-->
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>反眼跳任务（独立测试版）</title>
+    <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+    <!-- 实验呈现层（与 index.html 相同） -->
+    <div id="center" class="stim"></div>
+    <div id="left"   class="stim"></div>
+    <div id="right"  class="stim"></div>
+
+    <!-- 指导语 -->
+    <div id="intro" class="overlay show">
+        <div>
+            <h2>反眼跳任务</h2>
+            <p>请始终注视屏幕中央的 <b>+</b> 号。</p>
+            <p>当白色 <b>=</b> 号闪烁后，会在 <b>=</b> 号的同侧或对侧位置出现字母 <b>Q</b> 或 <b>O</b>，请记住它。</p>
+            <p>随后该位置会出现 <b>H</b>，再变成数字 <b>8</b>，请在看到 <b>8</b> 时立即按键：</p>
+            <p style="margin-top:18px"><b>Q&nbsp;→&nbsp;9</b>&nbsp;&nbsp;&nbsp;&nbsp;<b>O&nbsp;→&nbsp;0</b></p>
+            <p style="margin-top:20px">现在先做 <span id="practice-count">20</span> 次练习（有正误反馈），然后开始正式测试。</p>
+            <p class="hint">按 <b>空格</b> 开始练习</p>
+        </div>
+    </div>
+
+    <!-- ready? -->
+    <div id="ready" class="overlay">
+        <div>
+            <div style="font-family: 'Courier New', monospace; color:#ff0; font-size: 16px;">ready?</div>
+            <div class="hint" style="color:#aaa;font-size:16px;margin-top:30px;font-family:'Microsoft YaHei',sans-serif;">
+                按 <b>空格</b> 开始正式测试
+            </div>
+        </div>
+    </div>
+
+    <div id="feedback" class="overlay"></div>
+
+    <div id="uploading" class="overlay">
+        <div>
+            实验已结束，正在导出数据...<br>
+            <span style="color:#aaa;font-size:14px;">浏览器会弹出"是否允许多文件下载"提示，请点击允许。</span>
+        </div>
+    </div>
+
+    <div id="upload-fail" class="overlay">
+        <div>
+            <div>数据导出失败，请联系实验员。</div>
+            <div>以下为原始数据，可手动复制保存：</div>
+            <textarea id="upload-fail-text" readonly></textarea>
+            <div><button id="retry-upload">重试导出</button></div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ===== 1) 内联设置 window.AS_CONFIG（替代后端 Thymeleaf 注入） ===== -->
+<script>
+    (function () {
+        const params = new URLSearchParams(location.search);
+        const val = (k, d) => {
+            const v = params.get(k);
+            return (v == null || v === '') ? d : v;
+        };
+        const num = (k, d) => {
+            const v = params.get(k);
+            return (v == null || v === '') ? d : Number(v);
+        };
+
+        window.AS_CONFIG = {
+            // 必填项的默认值；可通过 ?subjectId=XXX 覆盖
+            subjectId:         val('subjectId',         'TEST'),
+            returnUrl:         val('returnUrl',         ''),
+            // 显示器与视距（不同显示器需要调整）
+            physicalWidthCm:   num('physicalWidthCm',   53.0),
+            viewingDistanceCm: num('viewingDistanceCm', 55.0),
+            eccentricityDeg:   num('eccentricityDeg',   11.33),
+            // 实验参数
+            practiceTrials:    num('practiceTrials',    20),
+            targetReversals:   num('targetReversals',   16),
+            initialSoaMs:      num('initialSoaMs',      120),
+            minSoaMs:          num('minSoaMs',          30),
+            maxSoaMs:          num('maxSoaMs',          3000),
+            responseTimeoutMs: num('responseTimeoutMs', 3000)
+        };
+
+        // 把练习次数同步到指导语
+        const pcEl = document.getElementById('practice-count');
+        if (pcEl) pcEl.textContent = window.AS_CONFIG.practiceTrials;
+    })();
+</script>
+
+<!-- ===== 2) 加载现有 JS 模块（与 jar 版本一致） ===== -->
+<script src="./js/geometry.js"></script>
+<script src="./js/sequence.js"></script>
+<script src="./js/adaptive.js"></script>
+<script src="./js/recorder.js"></script>
+<script src="./js/api.js"></script>
+<script src="./js/trial.js"></script>
+
+<!-- ===== 3) 覆盖 window.Api.save：改为浏览器本地下载 CSV + JSON ===== -->
+<script>
+    (function () {
+        const HEADERS = [
+            'trial_number','phase','trial_type','cue_position','target_position',
+            'target_letter','fixation_duration_ms','current_SOA_ms','key_pressed',
+            'is_correct','RT_ms','RT_valid','rule_A_adjustment','rule_B_triggered',
+            'rule_B_adjustment','rule_C_triggered','rule_C_adjustment',
+            'total_adjustment','next_SOA_ms','is_reversal','reversal_count'
+        ];
+
+        function csvCell(v) {
+            if (v == null) return '';
+            if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+            const s = String(v);
+            if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0) {
+                return '"' + s.replace(/"/g, '""') + '"';
+            }
+            return s;
+        }
+
+        function buildCsv(trials) {
+            const rows = trials.map(t => HEADERS.map(h => csvCell(t[h])).join(','));
+            // UTF-8 BOM 让 Excel 直接识别中文（虽然本程序不写中文，保持一致）
+            return '﻿' + HEADERS.join(',') + '\n' + rows.join('\n') + '\n';
+        }
+
+        const pad = n => String(n).padStart(2, '0');
+        function stamp() {
+            const d = new Date();
+            return d.getFullYear()
+                 + pad(d.getMonth() + 1) + pad(d.getDate()) + '_'
+                 + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+        }
+
+        function downloadBlob(name, content, mime) {
+            const blob = new Blob([content], { type: mime });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+        // 重新赋值 window.Api（必须在 api.js 之后、main.js 之前执行）
+        window.Api = {
+            save: async function (payload) {
+                const safeId = (payload.subjectId || 'ANON').replace(/[^A-Za-z0-9_\-]/g, '_');
+                const base = safeId + '_' + stamp();
+                downloadBlob(base + '.csv',
+                    buildCsv(payload.trials),
+                    'text/csv;charset=utf-8');
+                // 间隔 200ms 触发第二个下载，避免被浏览器合并屏蔽
+                await sleep(200);
+                downloadBlob(base + '_summary.json',
+                    JSON.stringify(payload.summary, null, 2),
+                    'application/json;charset=utf-8');
+                return { status: 'ok', csv: base + '.csv', summary: base + '_summary.json' };
+            }
+        };
+    })();
+</script>
+
+<!-- ===== 4) 启动调度（main.js 内的 bootstrap 会在 DOMContentLoaded 时运行） ===== -->
+<script src="./js/main.js"></script>
+
+</body>
+</html>

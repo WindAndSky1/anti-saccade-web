@@ -1,0 +1,124 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    background: #000;
+    color: #fff;
+    overflow: hidden;
+    font-family: "Courier New", Courier, monospace;
+}
+
+#app {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+}
+
+/* ------- 实验呈现层（黑底白字） ------- */
+
+.stim {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-family: "Courier New", Courier, monospace;
+    /* 文档规定 12pt：1pt = 1/72 inch, 96dpi 下 = 16px */
+    font-size: 16px;
+    font-weight: normal;
+    line-height: 1;
+    color: #ffffff;
+    user-select: none;
+    white-space: nowrap;
+    display: none;
+}
+
+#center { left: 50%; }
+#left   { left: calc(50% - var(--ecc-px, 320px)); }
+#right  { left: calc(50% + var(--ecc-px, 320px)); }
+
+.stim.show { display: block; }
+
+/* ------- 指导语 / ready? / 反馈 ------- */
+
+.overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 5vh 8vw;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+
+.overlay.show { display: flex; }
+
+#intro {
+    color: #fff;
+    font-size: 22px;
+    line-height: 2;
+}
+
+#intro h2 {
+    color: #ff9;
+    font-size: 30px;
+    margin-bottom: 16px;
+}
+
+#intro .hint {
+    margin-top: 28px;
+    color: #aaa;
+    font-size: 18px;
+}
+
+#ready {
+    color: #ffff00;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 16px;
+}
+
+#feedback {
+    font-family: "Microsoft YaHei", sans-serif;
+    font-size: 32px;
+    font-weight: bold;
+}
+
+#feedback.good { color: #5dff5d; }
+#feedback.bad  { color: #ff5d5d; }
+
+#uploading {
+    color: #ccc;
+    font-size: 18px;
+    font-family: "Microsoft YaHei", sans-serif;
+}
+
+/* ------- 上传失败遮罩 ------- */
+
+#upload-fail {
+    color: #fff;
+    font-size: 16px;
+    line-height: 1.7;
+    font-family: "Microsoft YaHei", sans-serif;
+}
+
+#upload-fail textarea {
+    width: 80vw;
+    height: 50vh;
+    background: #111;
+    color: #ddd;
+    border: 1px solid #555;
+    padding: 8px;
+    margin-top: 12px;
+    font-family: "Courier New", monospace;
+    font-size: 12px;
+}
+
+#upload-fail button {
+    margin-top: 12px;
+    padding: 8px 18px;
+    cursor: pointer;
+}
